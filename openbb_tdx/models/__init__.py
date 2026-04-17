@@ -1,13 +1,9 @@
 """openbb_tdx models."""
 
-from openbb_tdx.models.example import ExampleData, ExampleFetcher, ExampleQueryParams
-from openbb_tdx.models.tdx import TdxPriceData, TdxPriceFetcher, TdxPriceQueryParams
+from openbb_tdx.models.equity_historical import TdxQuantEquityHistoricalData, TdxQuantEquityHistoricalFetcher, TdxQuantEquityHistoricalQueryParams
 
 __all__ = [
-    "ExampleData",
-    "ExampleFetcher",
-    "ExampleQueryParams",
-    "TdxPriceData",
-    "TdxPriceFetcher",
-    "TdxPriceQueryParams",
+    "TdxQuantEquityHistoricalData",
+    "TdxQuantEquityHistoricalFetcher",
+    "TdxQuantEquityHistoricalQueryParams",
 ]

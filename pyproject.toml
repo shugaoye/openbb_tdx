@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openbb-tdx"
-version = "0.0.2"
+version = "0.0.10"
 description = "TdxQuant data provider extension for OpenBB Platform"
 authors = ["Super Quant <super.quant@example.com>"]
 readme = "README.md"
@@ -12,7 +12,6 @@ openbb = "4.6.0"
 openbb-core = { version = "^1.5.8" }
 mysharelib = "^1.0.5"
 uvicorn = "^0.40.0"
-tdxquant = {path = "C:/new_tdx_mock/PYPlugins/user", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 openbb-devtools = { version = "^1.5.4" }

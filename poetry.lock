@@ -216,6 +216,54 @@ dev = ["attribution (==1.7.0)", "black (==24.2.0)", "coverage[toml] (==7.4.1)", 
 docs = ["sphinx (==7.2.6)", "sphinx-mdinclude (==0.5.3)"]
 
 [[package]]
+name = "akracer"
+version = "0.0.14"
+description = "akracer is next version of py_mini_racer"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+markers = "platform_system == \"Linux\""
+files = [
+    {file = "akracer-0.0.14-py3-none-any.whl", hash = "sha256:629eaccd0e1d18366804b797eb2692ed47bed0028f55b5a5af3cc277d521df04"},
+    {file = "akracer-0.0.14.tar.gz", hash = "sha256:e084c14bf6d9a02d5da375e3af1cba3d46f103aa1cf3a2010593b3e95bf1c29a"},
+]
+
+[[package]]
+name = "akshare"
+version = "1.18.55"
+description = "AKShare is an elegant and simple financial data interface library for Python, built for human beings!"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "akshare-1.18.55-py3-none-any.whl", hash = "sha256:6ac4af6cebcc0b522961ebf967fef5c303408069baeef526cea58991f65c5531"},
+    {file = "akshare-1.18.55.tar.gz", hash = "sha256:d4d117f640f4b69d29dcd259409c408c36b849c483565faabb885791156f2cc2"},
+]
+
+[package.dependencies]
+akracer = {version = ">=0.0.13", markers = "platform_system == \"Linux\""}
+beautifulsoup4 = ">=4.9.1"
+curl_cffi = ">=0.13.0"
+decorator = ">=4.4.2"
+html5lib = ">=1.0.1"
+jsonpath = ">=0.82"
+lxml = ">=4.2.1"
+mini-racer = {version = ">=0.12.4", markers = "platform_system != \"Linux\""}
+openpyxl = ">=3.0.3"
+pandas = ">=2.0.0"
+py-mini-racer = {version = ">=0.6.0", markers = "platform_system == \"Linux\""}
+requests = ">=2.22.0"
+tabulate = ">=0.8.6"
+tqdm = ">=4.43.0"
+urllib3 = ">=1.25.8"
+xlrd = ">=1.2.0"
+
+[package.extras]
+dev = ["akqmt (>=0.1.0)", "commitizen (>=4.12.1) ; python_version >= \"3.10\"", "mplfinance (>=0.12.10b0)", "pre-commit (>=3.6.2) ; python_version >= \"3.9\"", "recommonmark (>=0.7.1)", "ruff (>=0.14.14) ; python_version >= \"3.10\"", "ruff-lsp (>=0.0.53) ; python_version >= \"3.10\"", "sphinx (>=7.4.3)", "sphinx_markdown_tables (>=0.0.17)", "sphinx_rtd_theme (>=1.0.0)"]
+full = ["akqmt"]
+qmt = ["akqmt"]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 description = "Document parameters, class attributes, return types, and variables inline, with Annotated."
@@ -752,6 +800,18 @@ files = [
     {file = "charset_normalizer-3.4.7-cp39-cp39-win_arm64.whl", hash = "sha256:bb8cc7534f51d9a017b93e3e85b260924f909601c3df002bcdb58ddb4dc41a5c"},
     {file = "charset_normalizer-3.4.7-py3-none-any.whl", hash = "sha256:3dce51d0f5e7951f8bb4900c257dad282f49190fdbebecd4ba99bcc41fef404d"},
     {file = "charset_normalizer-3.4.7.tar.gz", hash = "sha256:ae89db9e5f98a11a4bf50407d4363e7b09b31e55bc117b4f7d80aab97ba009e5"},
+]
+
+[[package]]
+name = "chinese-calendar"
+version = "1.11.0"
+description = "check if some day is holiday in China"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "chinese_calendar-1.11.0-py2.py3-none-any.whl", hash = "sha256:6800bf53bd011a8b3e9fbb91805d16210f59648c2d86130dc43c2aa7708207ec"},
+    {file = "chinese_calendar-1.11.0.tar.gz", hash = "sha256:931d9187cbf7bb1dc09685dedb5013e74678bbe03a173d71d46b76afc37f2597"},
 ]
 
 [[package]]
@@ -2243,6 +2303,17 @@ files = [
 ]
 
 [[package]]
+name = "jsonpath"
+version = "0.82.2"
+description = "An XPath for JSON"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "jsonpath-0.82.2.tar.gz", hash = "sha256:d87ef2bcbcded68ee96bc34c1809b69457ecec9b0c4dd471658a12bd391002d1"},
+]
+
+[[package]]
 name = "jupyter-client"
 version = "8.8.0"
 description = "Jupyter protocol implementation and client libraries"
@@ -2886,6 +2957,26 @@ files = [
 ]
 
 [[package]]
+name = "mini-racer"
+version = "0.14.1"
+description = "Minimal, modern embedded V8 for Python."
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "platform_system != \"Linux\""
+files = [
+    {file = "mini_racer-0.14.1-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:a401ecdf5f73d4714b76dc3a4c9b5780059cf4c59a5b64cff7497dc6c219d5a0"},
+    {file = "mini_racer-0.14.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:56cc6965a1665a50d8d613bc43aa83b4cec6b1f09acc69dc4c2845dacb201463"},
+    {file = "mini_racer-0.14.1-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:7f93d91973ddb2da4e899e06ecb426bfe7ea103cd1c92687ec9c38f206f375eb"},
+    {file = "mini_racer-0.14.1-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:cdf3a088e1363f16a695288f882abf76b3705b8e1df21418208b87ed010037a4"},
+    {file = "mini_racer-0.14.1-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:6788f31608c6c5d0faac4e6b4f36fc5498885f951e510717e8825eaebae6a4c5"},
+    {file = "mini_racer-0.14.1-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:ad4b5c15993caab571fac3d67e0d55157b358bd439e629e0fef26c45a12c8bab"},
+    {file = "mini_racer-0.14.1-py3-none-win_amd64.whl", hash = "sha256:4abd58c62c9955988dbc0cbf5a798914334fe570d2b192f8890bec20135ab6d1"},
+    {file = "mini_racer-0.14.1-py3-none-win_arm64.whl", hash = "sha256:440bef1269655b1da94b550612b50669de9881c3d88b805c139f7f1b5ec8ae7b"},
+    {file = "mini_racer-0.14.1.tar.gz", hash = "sha256:0df25889b7c4e753520324a1687d85e41f9f64984efa81963339ed400f004d49"},
+]
+
+[[package]]
 name = "more-itertools"
 version = "11.0.2"
 description = "More routines for operating on iterables, beyond itertools"
@@ -3215,6 +3306,23 @@ files = [
     {file = "mypy_extensions-1.1.0-py3-none-any.whl", hash = "sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505"},
     {file = "mypy_extensions-1.1.0.tar.gz", hash = "sha256:52e68efc3284861e772bbcd66823fde5ae21fd2fdb51c62a211403730b916558"},
 ]
+
+[[package]]
+name = "mysharelib"
+version = "1.0.5"
+description = "My share library"
+optional = false
+python-versions = "<3.14,>=3.11"
+groups = ["main"]
+files = [
+    {file = "mysharelib-1.0.5-py3-none-any.whl", hash = "sha256:3f43bd24f77781a0ad10cc8e1dbf4e55e98ca5859221334e3ce7e1c749502325"},
+    {file = "mysharelib-1.0.5.tar.gz", hash = "sha256:5b078cfc8208364e603d3da121c3d7eb3ca8d2f7a2dd3b7f2087fd1f6afaab9d"},
+]
+
+[package.dependencies]
+akshare = ">=1.17.38,<2.0.0"
+chinese-calendar = ">=1.10.0,<2.0.0"
+openbb-core = ">=1.4.8,<2.0.0"
 
 [[package]]
 name = "narwhals"
@@ -4693,6 +4801,21 @@ files = [
 tests = ["pytest"]
 
 [[package]]
+name = "py-mini-racer"
+version = "0.6.0"
+description = "Minimal, modern embedded V8 for Python."
+optional = false
+python-versions = "*"
+groups = ["main"]
+markers = "platform_system == \"Linux\""
+files = [
+    {file = "py_mini_racer-0.6.0-py2.py3-none-macosx_10_10_x86_64.whl", hash = "sha256:346e73bb89a2024888244d487834be24a121089ceb0641dd0200cb96c4e24b57"},
+    {file = "py_mini_racer-0.6.0-py2.py3-none-manylinux1_x86_64.whl", hash = "sha256:42896c24968481dd953eeeb11de331f6870917811961c9b26ba09071e07180e2"},
+    {file = "py_mini_racer-0.6.0-py2.py3-none-win_amd64.whl", hash = "sha256:97cab31bbf63ce462ba4cd6e978c572c916d8b15586156c7c5e0b2e42c10baab"},
+    {file = "py_mini_racer-0.6.0.tar.gz", hash = "sha256:f71e36b643d947ba698c57cd9bd2232c83ca997b0802fc2f7f79582377040c11"},
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 description = "C parser in Python"
@@ -6070,6 +6193,21 @@ anyio = ">=3.6.2,<5"
 full = ["httpx (>=0.27.0,<0.29.0)", "itsdangerous", "jinja2", "python-multipart (>=0.0.18)", "pyyaml"]
 
 [[package]]
+name = "tabulate"
+version = "0.10.0"
+description = "Pretty-print tabular data"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "tabulate-0.10.0-py3-none-any.whl", hash = "sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3"},
+    {file = "tabulate-0.10.0.tar.gz", hash = "sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d"},
+]
+
+[package.extras]
+widechars = ["wcwidth"]
+
+[[package]]
 name = "tdxquant"
 version = "0.1.1"
 description = "通达信量化平台"
@@ -7161,4 +7299,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.14"
-content-hash = "844e28f2e7efecc96e4240f36fd15f040e84d9cd3d0bd7f90918b6559f6d049c"
+content-hash = "fe58243f54d239a2e0c56ddb7176fffbe1b1ebc62a122dffe91eb5ae76b09a14"

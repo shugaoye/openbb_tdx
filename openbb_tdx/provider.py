@@ -3,6 +3,7 @@ from openbb_tdx.models.equity_historical import TdxQuantEquityHistoricalFetcher
 from openbb_tdx.models.equity_quote import TdxQuantEquityQuoteFetcher
 from openbb_tdx.models.equity_dividends import TdxQuantEquityDividendsFetcher
 from openbb_tdx.models.equity_profile import TdxQuantEquityProfileFetcher
+from openbb_tdx.models.equity_search import TdxQuantEquitySearchFetcher
 
 # mypy: disable-error-code="list-item"
 
@@ -20,5 +21,6 @@ provider = Provider(
         "EquityQuote": TdxQuantEquityQuoteFetcher,
         "HistoricalDividends": TdxQuantEquityDividendsFetcher,
         "EquityInfo": TdxQuantEquityProfileFetcher,
+        "EquitySearch": TdxQuantEquitySearchFetcher,
     }
 )

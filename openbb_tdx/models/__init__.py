@@ -2,6 +2,7 @@
 
 from openbb_tdx.models.equity_historical import TdxQuantEquityHistoricalData, TdxQuantEquityHistoricalFetcher, TdxQuantEquityHistoricalQueryParams
 from openbb_tdx.models.equity_quote import TdxQuantEquityQuoteData, TdxQuantEquityQuoteFetcher, TdxQuantEquityQuoteQueryParams
+from openbb_tdx.models.equity_dividends import TdxQuantEquityDividendsData, TdxQuantEquityDividendsFetcher, TdxQuantEquityDividendsQueryParams
 
 __all__ = [
     "TdxQuantEquityHistoricalData",
@@ -10,4 +11,7 @@ __all__ = [
     "TdxQuantEquityQuoteData",
     "TdxQuantEquityQuoteFetcher",
     "TdxQuantEquityQuoteQueryParams",
+    "TdxQuantEquityDividendsData",
+    "TdxQuantEquityDividendsFetcher",
+    "TdxQuantEquityDividendsQueryParams",
 ]

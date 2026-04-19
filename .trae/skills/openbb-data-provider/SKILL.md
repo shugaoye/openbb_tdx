@@ -9,6 +9,17 @@ description: Comprehensive guidance for developing OpenBB data providers using P
 
 This skill provides comprehensive guidance for creating, implementing, and troubleshooting OpenBB data providers. It covers the architecture, structure, and best practices for developing Python-based data providers that integrate seamlessly with the OpenBB ecosystem, leveraging FastAPI for endpoints and following OpenBB's standardization framework.
 
+## Quick Start Checklist
+
+Before implementing a new data provider, ensure you have:
+
+- [ ] Reviewed existing providers for similar functionality
+- [ ] Understood the data source API documentation
+- [ ] Identified the appropriate caching strategy (BlobCache vs TableCache)
+- [ ] Planned the data model fields and transformations
+- [ ] Prepared mock data for unit testing
+- [ ] Set up the development environment with `pip install -e .`
+
 ## Architecture Overview
 
 OpenBB data providers follow a standardized architecture that ensures consistency across the platform:
@@ -18,6 +29,12 @@ OpenBB data providers follow a standardized architecture that ensures consistenc
 - **Standard Models**: Shared data structures that ensure consistency across providers
 - **Fetcher Classes**: Handle data extraction and transformation from external APIs
 - **Routers**: Manage input/output operations and endpoint routing
+
+### Data Flow
+
+```
+User Request → Router → Fetcher.transform_query() → Fetcher.extract_data() → Fetcher.transform_data() → Response
+```
 
 ## Development Workflow
 
@@ -41,15 +58,14 @@ OpenBB data providers follow a standardized architecture that ensures consistenc
    ```
    my_provider/
    |-- __init__.py
+   |-- provider.py          # Provider registration
+   |-- router.py            # FastAPI route definitions
    |-- models/
    |   |-- __init__.py
-   |   `-- historical.py
-   |-- fetcher/
+   |   `-- historical.py    # Data models and fetchers
+   |-- utils/
    |   |-- __init__.py
-   |   `-- historical.py
-   |-- views/
-   |   |-- __init__.py
-   |   `-- historical.py
+   |   `-- helpers.py       # Data fetching helpers
    |-- pyproject.toml
    `-- README.md
    ```
@@ -60,15 +76,18 @@ OpenBB data providers follow a standardized architecture that ensures consistenc
    "my_provider" = "openbb_my_provider.provider:provider"
    ```
 
-3. **Provider Definition**: Initialize a `Provider` class in your `__init__.py`:
+3. **Provider Definition**: Initialize a `Provider` class in `provider.py`:
    ```python
    from openbb_core.provider.abstract.provider import Provider
+   from openbb_my_provider.models.historical import MyProviderHistoricalFetcher
 
    provider = Provider(
        name="my_provider",
-       fetcher_dict={},
-       repr_count=3,
-       full_name="My Custom Provider"
+       description="Data provider for MyProvider.",
+       website="https://myprovider.com",
+       fetcher_dict={
+           "Historical": MyProviderHistoricalFetcher,
+       }
    )
    ```
 
@@ -92,38 +111,186 @@ OpenBB data providers follow a standardized architecture that ensures consistenc
    ```python
    from openbb_core.provider.abstract.fetcher import Fetcher
    from openbb_core.provider.utils.helpers import amake_requests
-   from typing import Dict, List
+   from typing import Dict, List, Optional, Any
    
-   class MyProviderFetcher(Fetcher[MyProviderQueryParams, MyProviderData]):
+   class MyProviderFetcher(Fetcher[MyProviderQueryParams, List[MyProviderData]]):
+       """Transform the query, extract and transform the data from the endpoints."""
+
        @staticmethod
-       def transform_query(params: Dict[str, any]) -> MyProviderQueryParams:
+       def transform_query(params: Dict[str, Any]) -> MyProviderQueryParams:
+           """Transform the query params."""
            return MyProviderQueryParams(**params)
        
        @staticmethod
-       async def aextract(data: MyProviderQueryParams, **kwargs) -> Dict:
-           url = f"https://api.myprovider.com/data/{data.symbol}"
-           return await amake_requests(url)
+       def extract_data(
+           query: MyProviderQueryParams,
+           credentials: Optional[Dict[str, str]],
+           **kwargs: Any,
+       ) -> List[Dict]:
+           """Return the raw data from the endpoint."""
+           # Your data extraction logic here
+           return []
        
        @staticmethod
-       def transform_data(response: Dict, data: MyProviderQueryParams, **kwargs) -> List[MyProviderData]:
-           # Transform API response to standard format
-           return [MyProviderData(date=item['date'], close=item['close']) for item in response['data']]
+       def transform_data(
+           query: MyProviderQueryParams,
+           data: List[Dict],
+           **kwargs: Any,
+       ) -> List[MyProviderData]:
+           """Return the transformed data."""
+           return [MyProviderData.model_validate(d) for d in data]
    ```
 
 ### 4. Registering Your Fetcher
 
-Add your fetcher to the provider's `fetcher_dict` in `__init__.py`:
+Add your fetcher to the provider's `fetcher_dict` in `provider.py`:
 ```python
-from .fetcher.historical import MyProviderHistoricalFetcher
+from .models.historical import MyProviderHistoricalFetcher
 
 provider = Provider(
     name="my_provider",
     fetcher_dict={
-        "stock_price_historical": MyProviderHistoricalFetcher,
+        "Historical": MyProviderHistoricalFetcher,
     },
-    repr_count=3,
-    full_name="My Custom Provider"
 )
+```
+
+### 5. Adding Router Endpoints
+
+Create router endpoints in `router.py`:
+```python
+from openbb_core.app.model.obbject import OBBject
+from openbb_core.app.provider_interface import ProviderChoices
+from openbb_core.app.command_context import CommandContext
+from openbb_core.provider.abstract.data import Data
+from openbb_core.provider.abstract.query import QueryParams, ExtraParams, StandardParams
+
+router = Router()
+
+@router.command(model="MyProviderHistorical")
+async def historical(
+    cc: CommandContext,
+    provider_choices: ProviderChoices,
+    standard_params: StandardParams,
+    extra_params: ExtraParams,
+) -> OBBject[Data]:
+    """Get historical price data."""
+    return await OBBject.from_query(Query(**locals()))
+```
+
+---
+
+# Caching Strategies
+
+## Choosing the Right Cache
+
+OpenBB providers support two caching mechanisms:
+
+| Feature | BlobCache | TableCache |
+|---------|-----------|------------|
+| **Use Case** | Financial statements, key metrics | Time series data (OHLCV) |
+| **Storage** | Pickled DataFrame blobs | SQLite table with schema |
+| **Query Flexibility** | Symbol + period based | Date range queries |
+| **Schema Required** | No | Yes |
+| **Best For** | Structured financial reports | Historical price data |
+
+### When to Use BlobCache
+
+Use `BlobCache` for:
+- Financial statements (balance sheet, income statement, cash flow)
+- Key metrics and ratios
+- Company profile data
+- Any data where the entire dataset is fetched at once
+
+**BlobCache Pattern:**
+```python
+from mysharelib.blob_cache import BlobCache
+from openbb_my_provider import project_name
+
+def get_financial_data(
+    symbol: str,
+    period: str = "annual",
+    use_cache: bool = True,
+    limit: int = 5,
+) -> DataFrame:
+    """Get financial data with BlobCache."""
+    cache = BlobCache(table_name="financial_data", project=project_name)
+    logger.info(f"Fetching data for {symbol} with limit {limit}")
+    return cache.load_cached_data(symbol, period, use_cache, _fetch_data, limit)
+
+def _fetch_data(symbol: str, period: str = "annual", limit: int = 5) -> DataFrame:
+    """Callback function to fetch data when cache miss."""
+    # Your API call here
+    return df
+```
+
+### When to Use TableCache
+
+Use `TableCache` for:
+- Historical price data (OHLCV)
+- Time series with date-based queries
+- Data requiring schema validation
+
+**TableCache Pattern:**
+```python
+from mysharelib.table_cache import TableCache
+from openbb_my_provider import project_name
+
+SCHEMA = {
+    "date": "TEXT PRIMARY KEY",
+    "open": "REAL",
+    "high": "REAL",
+    "low": "REAL",
+    "close": "REAL",
+    "volume": "REAL",
+}
+
+def get_historical_data(symbol: str, use_cache: bool = True) -> DataFrame:
+    """Get historical data with TableCache."""
+    cache = TableCache(SCHEMA, project=project_name, table_name=f"hist_{symbol}", primary_key="date")
+    cached_data = cache.fetch_date_range(start_date, end_date)
+    if not cached_data.empty:
+        return cached_data
+    # Fetch from API and cache
+    df = fetch_from_api(symbol)
+    cache.write_dataframe(df)
+    return df
+```
+
+### BlobCache with Additional Parameters
+
+When using BlobCache with additional parameters (like `statement_type`), use closures:
+
+```python
+def get_financial_statement_data(
+    symbol: str,
+    statement_type: str,  # Additional parameter
+    period: str = "annual",
+    use_cache: bool = True,
+    limit: int = 5,
+) -> DataFrame:
+    """Get financial statement data with BlobCache."""
+    cache = BlobCache(table_name=statement_type, project=project_name)
+    
+    # Create a closure that captures statement_type
+    fetch_func = _get_fetch_func(statement_type)
+    return cache.load_cached_data(symbol, period, use_cache, fetch_func, limit)
+
+def _get_fetch_func(statement_type: str):
+    """Get the appropriate fetch function for the statement type."""
+    def fetch_func(symbol: str, period: str = "annual", limit: int = 5) -> DataFrame:
+        return _fetch_financial_statement_data(symbol, statement_type, period, limit)
+    return fetch_func
+
+def _fetch_financial_statement_data(
+    symbol: str,
+    statement_type: str,
+    period: str = "annual",
+    limit: int = 5,
+) -> DataFrame:
+    """Fetch financial statement data from API."""
+    # Your implementation here
+    pass
 ```
 
 ---
@@ -244,30 +411,66 @@ snapshot = tq.get_market_snapshot(
 )
 ```
 
-#### 3. Financial Data
+#### 3. Financial Data by Date
 
 ```python
-def get_financial_data(
-    stock_list: List[str],
-    field_list: List[str],
-    start_time: str = '',
-    end_time: str = '',
-    report_type: str = 'report_time'
+def get_financial_data_by_date(
+    stock_list: List[str] = [],
+    field_list: List[str] = [],
+    year: int = 0,
+    mmdd: int = 0
 ) -> Dict
 ```
 
 **Parameters:**
-- `report_type`: "report_time" (by reporting date) or "announce_time" (by announcement date)
+- `stock_list`: Stock codes (e.g., `['600519.SH']`)
+- `field_list`: Field codes (e.g., `['FN193', 'FN194']`)
+- `year`: Year parameter (see below)
+- `mmdd`: Month-day parameter (see below)
+
+**Year Parameter Semantics:**
+- `year=0, mmdd=0`: Latest available report
+- `year=0, mmdd=331/630/930/1231`: Latest report for that quarter
+- `year=N (non-zero)`: Specific year (e.g., `year=2023` for 2023 data)
+
+**Month-Day (mmdd) Values:**
+- `331`: Q1 (March 31)
+- `630`: Q2 (June 30)
+- `930`: Q3 (September 30)
+- `1231`: Q4 (December 31) - also used for annual reports
 
 **Code Example:**
 ```python
-fd = tq.get_financial_data(
-    stock_list=['688318.SH'],
-    field_list=['Fn193', 'Fn194', 'Fn195'],
-    start_time='20250101',
-    report_type='announce_time'
+# Get latest report
+fd = tq.get_financial_data_by_date(
+    stock_list=['600519.SH'],
+    field_list=['FN193', 'FN194'],
+    year=0,
+    mmdd=0
+)
+
+# Get 2023 annual report
+fd = tq.get_financial_data_by_date(
+    stock_list=['600519.SH'],
+    field_list=['FN193', 'FN194'],
+    year=2023,
+    mmdd=1231
+)
+
+# Get 2023 Q1 report
+fd = tq.get_financial_data_by_date(
+    stock_list=['600519.SH'],
+    field_list=['FN193', 'FN194'],
+    year=2023,
+    mmdd=331
 )
 ```
+
+**Important Notes:**
+- The `year` parameter is the **specific year**, not an offset
+- To get multiple years of data, iterate through years (e.g., 2023, 2022, 2021)
+- Always call `tq.initialize(__file__)` before using TdxQuant functions
+- Call `tq.close()` when done to release resources
 
 #### 4. Stock Information
 
@@ -382,18 +585,21 @@ def formula_process_mul_zb(...) -> Dict
 ### Provider Structure
 
 ```
-openbb_tdxquant/
+openbb_tdx/
 |-- __init__.py
+|-- provider.py
+|-- router.py
 |-- models/
 |   |-- __init__.py
-|   |-- historical.py
-|   ├── quote.py
-|   └── fundamentals.py
-|-- fetcher/
+|   |-- equity_historical.py
+|   |-- equity_quote.py
+|   |-- balance_sheet.py
+|   |-- income_statement.py
+|   `-- cash_flow.py
+|-- utils/
 |   |-- __init__.py
-|   |-- historical.py
-|   ├── quote.py
-|   └── fundamentals.py
+|   |-- helpers.py
+|   `-- financial_statement_mapping.py
 |-- pyproject.toml
 `-- README.md
 ```
@@ -401,7 +607,7 @@ openbb_tdxquant/
 ### Example: Historical Price Fetcher
 
 ```python
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 from pydantic import Field
@@ -430,16 +636,17 @@ class TdxQuantHistoricalData(Data):
     amount: float = Field(description="Amount in ten thousand yuan")
 
 
-class TdxQuantHistoricalFetcher(Fetcher[TdxQuantHistoricalQueryParams, TdxQuantHistoricalData]):
+class TdxQuantHistoricalFetcher(Fetcher[TdxQuantHistoricalQueryParams, List[TdxQuantHistoricalData]]):
 
     @staticmethod
-    def transform_query(params: Dict) -> TdxQuantHistoricalQueryParams:
+    def transform_query(params: Dict[str, Any]) -> TdxQuantHistoricalQueryParams:
         return TdxQuantHistoricalQueryParams(**params)
 
     @staticmethod
     def extract_data(
         query: TdxQuantHistoricalQueryParams,
-        credentials: Dict
+        credentials: Optional[Dict[str, str]],
+        **kwargs: Any,
     ) -> List[Dict]:
         try:
             df_dict = tq.get_market_data(
@@ -463,77 +670,249 @@ class TdxQuantHistoricalFetcher(Fetcher[TdxQuantHistoricalQueryParams, TdxQuantH
     @staticmethod
     def transform_data(
         query: TdxQuantHistoricalQueryParams,
-        data: List[Dict]
+        data: List[Dict],
+        **kwargs: Any,
     ) -> List[TdxQuantHistoricalData]:
         return [TdxQuantHistoricalData(**item) for item in data]
 ```
 
-### Example: Real-time Quote Fetcher
+### Example: Financial Statement Fetcher
 
 ```python
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional, Any, Literal
+from datetime import date, datetime
+
 from pydantic import Field
 from openbb_core.provider.abstract.data import Data
 from openbb_core.provider.abstract.query import QueryParams
 from openbb_core.provider.abstract.fetcher import Fetcher
+from openbb_core.provider.utils.errors import EmptyDataError
 
 
-class TdxQuantQuoteQueryParams(QueryParams):
-    symbol: str = Field(description="Stock symbol (e.g., 688318.SH)")
+class TdxQuantBalanceSheetQueryParams(QueryParams):
+    symbol: str = Field(description="Stock symbol (e.g., '600519.SH')")
+    period: Literal["annual", "quarter"] = Field(
+        default="annual",
+        description="Reporting period: 'annual' or 'quarter'"
+    )
+    limit: int = Field(default=5, description="Number of periods to return")
+    use_cache: bool = Field(default=True, description="Whether to use cached data")
 
 
-class TdxQuantQuoteData(Data):
-    symbol: str = Field(description="Stock symbol")
-    last: float = Field(description="Last price")
-    open: float = Field(description="Open price")
-    high: float = Field(description="High price")
-    low: float = Field(description="Low price")
-    volume: int = Field(description="Volume")
-    amount: float = Field(description="Amount")
-    timestamp: str = Field(description="Update timestamp")
+class TdxQuantBalanceSheetData(Data):
+    period_ending: date = Field(description="The ending date of the fiscal period.")
+    fiscal_period: str = Field(description="Fiscal period (Q1, Q2, Q3, Q4).")
+    fiscal_year: int = Field(description="Fiscal year.")
+    total_assets: Optional[float] = Field(default=None, description="Total assets.")
+    total_liabilities: Optional[float] = Field(default=None, description="Total liabilities.")
+    total_equity: Optional[float] = Field(default=None, description="Total equity.")
 
 
-class TdxQuantQuoteFetcher(Fetcher[TdxQuantQuoteQueryParams, TdxQuantQuoteData]):
-
-    def __init__(self):
-        super().__init__()
-        self._callback_func = None
-        self._cached_data = {}
+class TdxQuantBalanceSheetFetcher(
+    Fetcher[
+        TdxQuantBalanceSheetQueryParams,
+        List[TdxQuantBalanceSheetData],
+    ]
+):
+    """Transform the query, extract and transform the data from the TdxQuant endpoints."""
 
     @staticmethod
-    def transform_query(params: Dict) -> TdxQuantQuoteQueryParams:
-        return TdxQuantQuoteQueryParams(**params)
+    def transform_query(params: Dict[str, Any]) -> TdxQuantBalanceSheetQueryParams:
+        """Transform the query params."""
+        return TdxQuantBalanceSheetQueryParams(**params)
 
     @staticmethod
     def extract_data(
-        query: TdxQuantQuoteQueryParams,
-        credentials: Dict
-    ) -> Dict:
-        snapshot = tq.get_market_snapshot(
-            stock_code=query.symbol,
-            field_list=['Last', 'Open', 'High', 'Low', 'Volume', 'Amount']
+        query: TdxQuantBalanceSheetQueryParams,
+        credentials: Optional[Dict[str, str]],
+        **kwargs: Any,
+    ) -> List[Dict]:
+        """Return the raw data from the TdxQuant endpoint."""
+        from openbb_tdx.utils.helpers import get_financial_statement_data
+
+        limit = query.limit if query.limit is not None else 5
+
+        data = get_financial_statement_data(
+            symbol=query.symbol,
+            statement_type="balance_sheet",
+            period=query.period,
+            use_cache=query.use_cache,
+            limit=limit,
         )
-        
-        if not snapshot or query.symbol not in snapshot:
-            return {}
-            
-        return snapshot[query.symbol].to_dict()
+
+        if data.empty:
+            raise EmptyDataError()
+
+        return data.to_dict(orient="records")
 
     @staticmethod
     def transform_data(
-        query: TdxQuantQuoteQueryParams,
-        data: Dict
-    ) -> TdxQuantQuoteData:
-        return TdxQuantQuoteData(
-            symbol=query.symbol,
-            last=data.get('Last', 0),
-            open=data.get('Open', 0),
-            high=data.get('High', 0),
-            low=data.get('Low', 0),
-            volume=data.get('Volume', 0),
-            amount=data.get('Amount', 0),
-            timestamp=datetime.now().isoformat()
+        query: TdxQuantBalanceSheetQueryParams,
+        data: List[Dict],
+        **kwargs: Any,
+    ) -> List[TdxQuantBalanceSheetData]:
+        """Return the transformed data."""
+        return [TdxQuantBalanceSheetData.model_validate(d) for d in data]
+```
+
+### Financial Statement Helper Function
+
+```python
+from typing import Dict, Any, List, Optional
+import pandas as pd
+from pandas import DataFrame
+from mysharelib.blob_cache import BlobCache
+from mysharelib.tools import normalize_symbol
+from tqcenter import tq
+import logging
+
+logger = logging.getLogger(__name__)
+
+VALID_STATEMENT_TYPES = ["balance_sheet", "income_statement", "cash_flow"]
+
+
+def get_financial_statement_data(
+    symbol: str,
+    statement_type: str,
+    period: str = "annual",
+    use_cache: bool = True,
+    limit: int = 5,
+) -> DataFrame:
+    """Get financial statement data for a given symbol."""
+    if statement_type not in VALID_STATEMENT_TYPES:
+        raise ValueError(f"Invalid statement_type: {statement_type}")
+
+    cache = BlobCache(table_name=statement_type, project=project_name)
+    logger.info(f"Fetching {statement_type} data for {symbol}")
+
+    fetch_func = _get_fetch_func(statement_type)
+    return cache.load_cached_data(symbol, period, use_cache, fetch_func, limit)
+
+
+def _get_fetch_func(statement_type: str):
+    """Get the appropriate fetch function for the statement type."""
+    def fetch_func(symbol: str, period: str = "annual", limit: int = 5) -> DataFrame:
+        return _fetch_financial_statement_data(symbol, statement_type, period, limit)
+    return fetch_func
+
+
+def _fetch_financial_statement_data(
+    symbol: str,
+    statement_type: str,
+    period: str = "annual",
+    limit: int = 5,
+) -> DataFrame:
+    """Fetch financial statement data from TdxQuant API."""
+    from openbb_tdx.utils.financial_statement_mapping import (
+        BalanceSheetMapper,
+        IncomeStatementMapper,
+        CashFlowStatementMapper,
+    )
+
+    symbol_b, symbol_f, market = normalize_symbol(symbol)
+    stock_code = f"{symbol_b}.{market}"
+
+    if statement_type == "balance_sheet":
+        mapper = BalanceSheetMapper
+    elif statement_type == "income_statement":
+        mapper = IncomeStatementMapper
+    elif statement_type == "cash_flow":
+        mapper = CashFlowStatementMapper
+    else:
+        raise ValueError(f"Unknown statement type: {statement_type}")
+
+    field_list = mapper.get_field_list()
+    mmdd_values = [1231] if period == "annual" else [1231, 930, 630, 331]
+
+    tq.initialize(__file__)
+
+    try:
+        # First get latest report to determine current year
+        latest_data = tq.get_financial_data_by_date(
+            stock_list=[stock_code],
+            field_list=field_list,
+            year=0,
+            mmdd=0
         )
+
+        if not latest_data or stock_code not in latest_data:
+            logger.warning(f"No {statement_type} data found for {symbol}")
+            return pd.DataFrame()
+
+        latest_mapped = mapper.map_from_get_financial_data_by_date(
+            latest_data, year=0, mmdd=0
+        )
+        
+        if stock_code not in latest_mapped:
+            logger.warning(f"No {statement_type} data found for {symbol}")
+            return pd.DataFrame()
+
+        latest_record = latest_mapped[stock_code]
+        period_ending = latest_record.get("period_ending")
+        
+        if period_ending:
+            if hasattr(period_ending, 'year'):
+                current_year = period_ending.year
+            else:
+                current_year = int(str(period_ending)[:4])
+        else:
+            current_year = datetime.now().year
+
+        all_data = []
+
+        # Iterate through years to get historical data
+        if period == "annual":
+            for year_offset in range(limit):
+                target_year = current_year - year_offset
+                tdx_data = tq.get_financial_data_by_date(
+                    stock_list=[stock_code],
+                    field_list=field_list,
+                    year=target_year,
+                    mmdd=1231
+                )
+
+                if tdx_data and stock_code in tdx_data:
+                    mapped_data = mapper.map_from_get_financial_data_by_date(
+                        tdx_data, year=target_year, mmdd=1231
+                    )
+                    if stock_code in mapped_data:
+                        record = mapped_data[stock_code]
+                        all_data.append(record)
+        else:
+            for year_offset in range((limit // 4) + 1):
+                target_year = current_year - year_offset
+                for mmdd in mmdd_values:
+                    if len(all_data) >= limit:
+                        break
+                    tdx_data = tq.get_financial_data_by_date(
+                        stock_list=[stock_code],
+                        field_list=field_list,
+                        year=target_year,
+                        mmdd=mmdd
+                    )
+
+                    if tdx_data and stock_code in tdx_data:
+                        mapped_data = mapper.map_from_get_financial_data_by_date(
+                            tdx_data, year=target_year, mmdd=mmdd
+                        )
+                        if stock_code in mapped_data:
+                            record = mapped_data[stock_code]
+                            all_data.append(record)
+                if len(all_data) >= limit:
+                    break
+
+        if not all_data:
+            logger.warning(f"No {statement_type} data found for {symbol}")
+            return pd.DataFrame()
+
+        df = pd.DataFrame(all_data)
+        return df.head(limit)
+
+    except Exception as e:
+        logger.error(f"Error fetching {statement_type} data for {symbol}: {e}")
+        return pd.DataFrame()
+    finally:
+        tq.close()
 ```
 
 ## Authentication and Connection Management
@@ -640,319 +1019,395 @@ TdxQuant uses standard Chinese stock code format:
 | Volume | Trading volume | Lots |
 | Amount | Trading amount | Ten thousand Yuan |
 
-## Testing Requirements
+---
 
-### Unit Tests
+# Testing Requirements
+
+## Unit Test Structure
+
+### Test File Organization
+
+```
+tests/
+|-- conftest.py           # Shared fixtures
+|-- test_equity_historical.py
+|-- test_equity_quote.py
+|-- test_balance_sheet.py
+|-- test_income_statement.py
+`-- test_cash_flow.py
+```
+
+### Conftest.py Template
 
 ```python
+import os
+import logging
 import pytest
-from unittest.mock import Mock, patch
-from datetime import datetime
-
-from openbb_tdxquant.fetcher.historical import (
-    TdxQuantHistoricalFetcher,
-    TdxQuantHistoricalQueryParams
-)
+from mysharelib.tools import setup_logger
+from openbb_tdx import project_name
 
 
-class TestTdxQuantHistoricalFetcher:
+@pytest.fixture(scope="session", autouse=True)
+def setup_logging():
+    setup_logger(project_name)
 
-    @pytest.fixture
-    def mock_tq(self):
-        with patch('tqcenter.tq') as mock:
-            yield mock
+
+@pytest.fixture
+def logger():
+    return logging.getLogger(__name__)
+
+
+@pytest.fixture
+def default_provider():
+    return "tdxquant"
+
+
+@pytest.fixture
+def tdxquant_api_key():
+    return os.environ.get("TDXQUANT_API_KEY")
+```
+
+## Mocking Best Practices
+
+### Critical Rule: Mock Where Used, Not Where Defined
+
+When mocking helper functions, mock them in the module where they are **used**, not where they are **defined**:
+
+```python
+# CORRECT - Mock where the function is imported and used
+@patch("openbb_tdx.models.balance_sheet.get_financial_statement_data")
+def test_extract_data_success(self, mock_get_data):
+    mock_get_data.return_value = pd.DataFrame({...})
+    # Test code
+
+# WRONG - Mock where the function is defined
+@patch("openbb_tdx.utils.helpers.get_financial_statement_data")
+def test_extract_data_success(self, mock_get_data):
+    # This won't work because the function is imported in balance_sheet.py
+```
+
+### Mocking TdxQuant API
+
+```python
+from unittest.mock import patch, MagicMock
+import pytest
+import pandas as pd
+
+
+class TestTdxQuantBalanceSheetFetcher:
+
+    @patch("openbb_tdx.models.balance_sheet.get_financial_statement_data")
+    def test_extract_data_success(self, mock_get_data):
+        """Test extract_data returns correct data."""
+        mock_data = MagicMock()
+        mock_data.empty = False
+        mock_data.to_dict.return_value = [
+            {
+                "period_ending": "2023-12-31",
+                "fiscal_period": "Q4",
+                "fiscal_year": 2023,
+                "total_assets": 1000000000.0,
+                "total_liabilities": 500000000.0,
+                "total_equity": 500000000.0,
+            }
+        ]
+        mock_get_data.return_value = mock_data
+
+        query = TdxQuantBalanceSheetQueryParams(
+            symbol="600519.SH",
+            period="annual",
+            limit=5,
+        )
+
+        result = TdxQuantBalanceSheetFetcher.extract_data(query, {})
+
+        assert len(result) == 1
+        assert result[0]["period_ending"] == "2023-12-31"
+        mock_get_data.assert_called_once()
+
+    @patch("openbb_tdx.models.balance_sheet.get_financial_statement_data")
+    def test_extract_data_empty(self, mock_get_data):
+        """Test extract_data raises EmptyDataError on empty data."""
+        mock_data = MagicMock()
+        mock_data.empty = True
+        mock_get_data.return_value = mock_data
+
+        query = TdxQuantBalanceSheetQueryParams(
+            symbol="600519.SH",
+            period="annual",
+            limit=5,
+        )
+
+        with pytest.raises(EmptyDataError):
+            TdxQuantBalanceSheetFetcher.extract_data(query, {})
 
     def test_transform_query(self):
+        """Test transform_query creates correct params."""
         params = {
-            'symbol': '688318.SH',
-            'start_date': '20250101',
-            'end_date': '20250601'
+            "symbol": "600519.SH",
+            "period": "annual",
+            "limit": 10,
+            "use_cache": False,
         }
-        result = TdxQuantHistoricalFetcher.transform_query(params)
-        
-        assert result.symbol == '688318.SH'
-        assert result.start_date == '20250101'
-        assert result.end_date == '20250601'
 
-    @pytest.mark.asyncio
-    async def test_fetch_with_mock(self, mock_tq):
-        mock_tq.get_market_data.return_value = {
-            '688318.SH': Mock(
-                to_dict=lambda orient: [
-                    {'date': '2025-01-01', 'open': 10.0, 'high': 11.0, 
-                     'low': 9.5, 'close': 10.5, 'volume': 1000, 'amount': 10000}
-                ]
-            )
-        }
-        
-        query = TdxQuantHistoricalQueryParams(
-            symbol='688318.SH',
-            start_date='20250101',
-            end_date='20250601'
-        )
-        
-        fetcher = TdxQuantHistoricalFetcher()
-        data = fetcher.extract_data(query, {})
-        
-        assert len(data) > 0
-        assert data[0]['close'] == 10.5
+        result = TdxQuantBalanceSheetFetcher.transform_query(params)
+
+        assert result.symbol == "600519.SH"
+        assert result.period == "annual"
+        assert result.limit == 10
+        assert result.use_cache is False
+
+    def test_transform_data(self):
+        """Test transform_data creates correct data models."""
+        query = TdxQuantBalanceSheetQueryParams(symbol="600519.SH")
+        data = [
+            {
+                "period_ending": "2023-12-31",
+                "fiscal_period": "Q4",
+                "fiscal_year": 2023,
+                "total_assets": 1000000000.0,
+            }
+        ]
+
+        result = TdxQuantBalanceSheetFetcher.transform_data(query, data)
+
+        assert len(result) == 1
+        assert isinstance(result[0], TdxQuantBalanceSheetData)
+        assert result[0].fiscal_year == 2023
 ```
 
-### Integration Tests
+### Testing Date Fields
+
+When testing date fields, use `date` objects for comparison:
 
 ```python
-import pytest
-from openbb import obb
+from datetime import date
 
-
-class TestTdxQuantIntegration:
-
-    @pytest.mark.skipif(
-        not is_tdxquant_available(),
-        reason="TdxQuant client not available"
+def test_data_model_fields(self):
+    """Test that data model fields are correctly typed."""
+    data = TdxQuantBalanceSheetData(
+        period_ending=date(2023, 12, 31),
+        fiscal_period="Q4",
+        fiscal_year=2023,
+        total_assets=1000000000.0,
     )
-    def test_historical_price(self):
-        result = obb.equity.price.historical(
-            symbol="600519",
-            start_date="2025-01-01",
-            end_date="2025-06-01",
-            provider="tdxquant"
-        )
-        
-        assert result is not None
-        df = result.to_dataframe()
-        assert len(df) > 0
-        assert 'close' in df.columns
 
-    @pytest.mark.skipif(
-        not is_tdxquant_available(),
-        reason="TdxQuant client not available"
-    )
-    def test_quote(self):
-        result = obb.equity.quote(
-            symbol="600519",
-            provider="tdxquant"
-        )
-        
-        assert result is not None
-        assert result.data['last'] > 0
+    assert data.period_ending == date(2023, 12, 31)
+    assert data.fiscal_year == 2023
 ```
 
-### Validation Criteria
+## Running Tests
 
-1. **Data Accuracy**: Compare with known reference data
-2. **Response Time**: Ensure queries complete within acceptable time
-3. **Error Handling**: Verify proper error messages for invalid inputs
-4. **Connection Recovery**: Test reconnection after client restart
-5. **Data Completeness**: Verify all expected fields are populated
+```bash
+# Run all tests
+pytest tests/ -v
 
-## Performance Optimization
+# Run specific test file
+pytest tests/test_balance_sheet.py -v
 
-### Caching Strategy
+# Run tests matching pattern
+pytest tests/ -k "balance" -v
+
+# Run with coverage
+pytest tests/ --cov=openbb_tdx --cov-report=html
+```
+
+---
+
+# Common Pitfalls and Solutions
+
+## 1. TableCache vs BlobCache Confusion
+
+**Problem:** Using `TableCache` for financial statements causes errors because `fetch_all()` method doesn't exist.
+
+**Solution:** Use `BlobCache` for financial statements and other non-time-series data.
 
 ```python
-from functools import lru_cache
-from datetime import datetime, timedelta
+# WRONG
+cache = TableCache(schema, project=project_name, table_name=name, primary_key="date")
+cached_data = cache.fetch_all()  # AttributeError!
 
-class TdxQuantCache:
-    _cache = {}
-    _cache_ttl = timedelta(minutes=5)
+# CORRECT
+cache = BlobCache(table_name="balance_sheet", project=project_name)
+return cache.load_cached_data(symbol, period, use_cache, fetch_func, limit)
+```
+
+## 2. Year Parameter Misunderstanding
+
+**Problem:** Treating TdxQuant's `year` parameter as an offset instead of actual year.
+
+**Solution:** The `year` parameter is the specific year (e.g., 2023), not an offset.
+
+```python
+# WRONG - treating year as offset
+for year_offset in range(limit):
+    tdx_data = tq.get_financial_data_by_date(year=year_offset, ...)
+
+# CORRECT - using actual years
+for year_offset in range(limit):
+    target_year = current_year - year_offset
+    tdx_data = tq.get_financial_data_by_date(year=target_year, ...)
+```
+
+## 3. Mock Path Errors
+
+**Problem:** Tests fail because mocks don't intercept the function calls.
+
+**Solution:** Mock where the function is imported and used, not where it's defined.
+
+```python
+# If balance_sheet.py has: from openbb_tdx.utils.helpers import get_financial_statement_data
+# Then mock it as:
+@patch("openbb_tdx.models.balance_sheet.get_financial_statement_data")
+```
+
+## 4. Empty DataFrame Handling
+
+**Problem:** Code crashes when API returns no data.
+
+**Solution:** Always check for empty DataFrames and raise `EmptyDataError`.
+
+```python
+from openbb_core.provider.utils.errors import EmptyDataError
+
+def extract_data(query, credentials):
+    data = fetch_from_api(query.symbol)
     
-    @classmethod
-    def get(cls, key: str):
-        if key in cls._cache:
-            data, timestamp = cls._cache[key]
-            if datetime.now() - timestamp < cls._cache_ttl:
-                return data
-        return None
+    if data.empty:
+        raise EmptyDataError()
     
-    @classmethod
-    def set(cls, key: str, value):
-        cls._cache[key] = (value, datetime.now())
+    return data.to_dict(orient="records")
 ```
 
-### Batch Processing
+## 5. Resource Cleanup
+
+**Problem:** TdxQuant connections not properly closed, causing resource leaks.
+
+**Solution:** Always use try/finally to close connections.
 
 ```python
-def fetch_multiple_stocks(stock_list: List[str], **kwargs):
-    """Fetch data for multiple stocks efficiently"""
-    return tq.get_market_data(stock_list=stock_list, **kwargs)
+def fetch_data():
+    tq.initialize(__file__)
+    try:
+        data = tq.get_market_data(...)
+        return data
+    finally:
+        tq.close()
 ```
 
-## Troubleshooting
+---
 
-### Common Issues
+# Reference Implementations
 
-1. **Client Not Running**
-   - Error: "TQ data interface initialization failed"
-   - Solution: Start TongDaXin client and log in
+## Reference Projects
 
-2. **Invalid Stock Code**
-   - Error: "股票代码格式错误"
-   - Solution: Use correct format (6 digits + .SH/.SZ)
-
-3. **Data Not Available**
-   - Error: Empty DataFrame returned
-   - Solution: Download required data in TongDaXin client
-
-4. **DLL Loading Failure**
-   - Error: "TPythClient.dll not found"
-   - Solution: Ensure DLL is in correct path
-
-### Debug Mode
-
-```python
-import logging
-
-logging.basicConfig(level=logging.DEBUG)
-tq.initialize(__file__)
-```
-
-## FastAPI Integration
-
-OpenBB leverages FastAPI for its endpoint routing. When implementing your provider:
-
-1. **Endpoint Structure**: Follow OpenBB's standard patterns:
-   - `/equity/price/historical` for historical stock prices
-   - `/equity/quote` for real-time quotes
-   - `/equity/fundamentals` for financial data
-
-2. **Parameter Validation**: Use Pydantic models for request validation:
-   ```python
-   from pydantic import BaseModel, Field
-   
-   class HistoricalPriceQueryParams(BaseModel):
-       symbol: str = Field(..., description="Stock symbol to query")
-       start_date: Optional[str] = Field(None, description="Start date (YYYY-MM-DD)")
-       end_date: Optional[str] = Field(None, description="End date (YYYY-MM-DD)")
-   ```
-
-3. **Error Handling**: Implement proper error handling:
-   ```python
-   from openbb_core.provider.abstract.error import OpenBBError
-   
-   try:
-       data = tq.get_market_data(...)
-   except Exception as e:
-       raise OpenBBError(f"Failed to fetch data from TdxQuant: {str(e)}")
-   ```
-
-## Data Validation and Error Management
-
-### Input Validation
-- Validate all input parameters using Pydantic models
-- Check for required fields and proper data types
-- Validate symbol formats, date ranges, and other constraints
-
-### Data Transformation
-- Ensure data conforms to OpenBB's standard models
-- Handle missing or null values appropriately
-- Convert data types as needed (strings to floats, dates to proper format)
-
-### Error Handling Strategies
-1. **Provider-Specific Errors**: Handle TongDaXin client issues, DLL errors
-2. **Data Quality Issues**: Validate data integrity and handle malformed responses
-3. **Fallback Mechanisms**: Consider fallback to AKShare when TdxQuant unavailable
-
-## Testing and Debugging
-
-### Unit Testing
-Create comprehensive unit tests for your provider:
-```python
-import pytest
-from openbb_tdxquant.models.historical import TdxQuantHistoricalFetcher
-
-@pytest.mark.asyncio
-async def test_fetcher():
-    params = {"symbol": "600519.SH"}
-    fetcher = TdxQuantHistoricalFetcher()
-    result = await fetcher.fetch(params)
-    assert result is not None
-```
-
-### Integration Testing
-Test your provider within the OpenBB ecosystem:
-```python
-from openbb import obb
-
-result = await obb.equity.price.historical(
-    symbol="600519",
-    provider="tdxquant"
-)
-assert result is not None
-```
-
-### Debugging Tips
-- Enable debug logging: `obb.debug = True`
-- Use `obb.coverage.providers` to check installed provider coverage
-- Verify your provider is properly registered with `obb.registered_providers`
-
-## Coding Standards and Patterns
-
-### Naming Conventions
-- Use lowercase with underscores for module names: `historical_price.py`
-- Use PascalCase for class names: `TdxQuantHistoricalFetcher`
-- Use snake_case for function and variable names: `transform_query`
-
-### Code Organization
-- Separate concerns: models, fetchers, and views in distinct modules
-- Keep fetcher classes focused on single responsibilities
-- Use descriptive function names that clearly indicate their purpose
-
-### Documentation Standards
-- Include comprehensive docstrings for all public methods
-- Document all parameters, return values, and exceptions
-- Follow OpenBB's documentation patterns
-
-## Integration with OpenBB Ecosystem
-
-### Standard Model Compliance
-Ensure your provider's data models comply with OpenBB's standard models to enable:
-- Cross-provider comparison
-- Consistent data structure
-- Unified interface experience
-
-### Configuration Management
-- Store API keys securely using OpenBB's configuration system
-- Implement proper credential validation
-- Handle configuration changes gracefully
-
-### Performance Optimization
-- Implement efficient data caching mechanisms
-- Use asynchronous operations where possible
-- Optimize API calls to minimize response time
-
-## Troubleshooting Common Issues
-
-### Provider Not Recognized
-- Verify your provider is correctly registered in `pyproject.toml`
-- Run `openbb-build` after modifying the `fetcher_dict`
-- Check that your package is properly installed
-
-### Data Model Mismatches
-- Ensure your models inherit from the correct standard models
-- Verify field names and types match expectations
-- Check that transformations maintain data integrity
-
-### API Connection Issues
-- Confirm TongDaXin client is running
-- Check DLL path configuration
-- Verify stock code formats
-
-## Resources
-
-### References
-- [TdxQuant Official Documentation](https://help.tdx.com.cn/quant/docs/markdown/ctx.stock.md/)
-- [tqcenter.py](references/tqcenter.py) - Full API implementation
-- [tdxdata_test.py](references/tdxdata_test.py) - Usage examples
 - [openbb_akshare](references/openbb_akshare) - Example provider for AKShare
+- [openbb_tdx](.) - TdxQuant provider implementation
 
-### Related Projects
-- [openbb-akshare](https://github.com/finanalyzer/openbb_akshare) - AKShare provider for comparison
-- [openbb-tushare](https://github.com/finanalyzer/openbb_tushare) - Tushare provider
+## Key Files to Reference
 
-### Scripts
-Helper scripts for common development tasks are available in the scripts directory.
+| File | Purpose |
+|------|---------|
+| `provider.py` | Provider registration and fetcher dictionary |
+| `router.py` | FastAPI route definitions |
+| `models/*.py` | Data models and fetcher implementations |
+| `utils/helpers.py` | Data fetching and caching helpers |
+| `utils/financial_statement_mapping.py` | TDX to OpenBB field mappings |
 
-### Assets
+---
+
+# Version Compatibility
+
+## Python Version
+
+- Minimum: Python 3.9
+- Recommended: Python 3.11+
+
+## OpenBB Core Version
+
+- Minimum: openbb-core 2.0.0
+- Check `pyproject.toml` for current version requirements
+
+## Dependency Management
+
+```toml
+[tool.poetry.dependencies]
+python = "^3.9"
+openbb-core = "^2.0.0"
+pandas = "^2.0.0"
+pydantic = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+pytest-asyncio = "^0.21.0"
+```
+
+---
+
+# Documentation Templates
+
+## Model Docstring Template
+
+```python
+"""TdxQuant [Feature Name] Model.
+
+This module provides data models and fetchers for [description of functionality].
+
+Example:
+    >>> from openbb import obb
+    >>> data = obb.equity.fundamental.balance_sheet(symbol="600519.SH", provider="tdxquant")
+"""
+```
+
+## Fetcher Docstring Template
+
+```python
+class TdxQuant[Feature]Fetcher(
+    Fetcher[
+        TdxQuant[Feature]QueryParams,
+        List[TdxQuant[Feature]Data],
+    ]
+):
+    """Transform the query, extract and transform the data from the TdxQuant endpoints.
+
+    This fetcher retrieves [description] from TdxQuant API.
+
+    Parameters
+    ----------
+    symbol : str
+        Stock symbol in format XXXXXX.SH or XXXXXX.SZ
+    period : Literal["annual", "quarter"]
+        Reporting period
+    limit : int
+        Number of periods to return
+
+    Returns
+    -------
+    List[TdxQuant[Feature]Data]
+        List of [feature] data records
+
+    Raises
+    ------
+    EmptyDataError
+        When no data is returned from the API
+    """
+```
+
+---
+
+# Best Practices Summary
+
+1. **Use BlobCache for financial statements** - Not TableCache
+2. **Mock where functions are used** - Not where they're defined
+3. **Always handle empty data** - Raise `EmptyDataError`
+4. **Clean up TdxQuant connections** - Use try/finally
+5. **Use actual year values** - Not offsets for TdxQuant API
+6. **Keep validation simple** - Use lists instead of complex schemas when schemas aren't needed
+7. **Follow the three-method fetcher pattern** - `transform_query`, `extract_data`, `transform_data`
+8. **Write comprehensive tests** - Cover success, empty data, and error cases
+9. **Document all parameters** - Use Pydantic Field descriptions
+10. **Follow existing patterns** - Check reference implementations before starting
+
+---
+
 Template files and boilerplate code for rapid provider development are available in the assets directory.

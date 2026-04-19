@@ -21,3 +21,36 @@ async def equity_historical(
 ) -> OBBject[BaseModel]:
     """Get TdxQuant equity historical price data."""
     return await OBBject.from_query(Query(**locals()))
+
+
+@router.command(model="TdxQuantBalanceSheet")
+async def balance_sheet(
+    cc: CommandContext,
+    provider_choices: ProviderChoices,
+    standard_params: StandardParams,
+    extra_params: ExtraParams,
+) -> OBBject[BaseModel]:
+    """Get TdxQuant balance sheet data."""
+    return await OBBject.from_query(Query(**locals()))
+
+
+@router.command(model="TdxQuantIncomeStatement")
+async def income_statement(
+    cc: CommandContext,
+    provider_choices: ProviderChoices,
+    standard_params: StandardParams,
+    extra_params: ExtraParams,
+) -> OBBject[BaseModel]:
+    """Get TdxQuant income statement data."""
+    return await OBBject.from_query(Query(**locals()))
+
+
+@router.command(model="TdxQuantCashFlowStatement")
+async def cash_flow(
+    cc: CommandContext,
+    provider_choices: ProviderChoices,
+    standard_params: StandardParams,
+    extra_params: ExtraParams,
+) -> OBBject[BaseModel]:
+    """Get TdxQuant cash flow statement data."""
+    return await OBBject.from_query(Query(**locals()))

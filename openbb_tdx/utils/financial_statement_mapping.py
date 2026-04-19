@@ -248,15 +248,15 @@ class BaseMapper:
         year : int
             The year parameter used in the query:
             - If 0 and mmdd is 0: latest report
-            - If 0 and mmdd < 300: mmdd periods back from latest
             - If 0 and mmdd is 331/630/930/1231: latest report for that quarter
-            - If non-zero: that many years back from current period
+            - If non-zero: specific year (e.g., 2023 for year 2023 data)
         mmdd : int
             The month-day parameter used in the query:
+            - 0: use latest available period (when year > 0)
             - 331: Q1 (March 31)
             - 630: Q2 (June 30)
             - 930: Q3 (September 30)
-            - 1231: Q4 (December 31)
+            - 1231: Q4 (December 31) - also used for annual reports
         
         Returns
         -------

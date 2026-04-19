@@ -13,6 +13,7 @@ from datetime import (
 from tqcenter import tq
 import logging
 from mysharelib.table_cache import TableCache
+from mysharelib.blob_cache import BlobCache
 from mysharelib.tools import setup_logger, normalize_symbol
 from openbb_tdx import project_name
 
@@ -226,3 +227,205 @@ def get_exchange_name_from_symbol(symbol: str) -> str:
     
     symbol_b, symbol_f, market = normalize_symbol(symbol)
     return get_exchange_name(market)
+
+
+VALID_STATEMENT_TYPES = ["balance_sheet", "income_statement", "cash_flow"]
+
+
+
+def get_financial_statement_data(
+    symbol: str,
+    statement_type: str,
+    period: str = "annual",
+    use_cache: bool = True,
+    limit: int = 5,
+) -> DataFrame:
+    """Get financial statement data for a given symbol.
+
+    Parameters
+    ----------
+    symbol : str
+        Stock symbol (e.g., '600519.SH')
+    statement_type : str
+        Type of financial statement: 'balance_sheet', 'income_statement', or 'cash_flow'
+    period : str
+        Reporting period: 'annual' or 'quarter'
+    use_cache : bool
+        Whether to use cached data if available
+    limit : int
+        Maximum number of periods to return
+
+    Returns
+    -------
+    DataFrame
+        Financial statement data as a pandas DataFrame
+    """
+    symbol_b, symbol_f, market = normalize_symbol(symbol)
+    
+    if statement_type not in VALID_STATEMENT_TYPES:
+        raise ValueError(f"Invalid statement_type: {statement_type}. Must be one of {VALID_STATEMENT_TYPES}")
+
+    cache = BlobCache(table_name=statement_type, project=project_name)
+    logger.info(f"Fetching {statement_type} data for {symbol} with limit {limit} and use_cache={use_cache}")
+
+    fetch_func = _get_fetch_func(statement_type)
+    return cache.load_cached_data(symbol_f, period, use_cache, fetch_func, limit)
+
+
+def _get_fetch_func(statement_type: str):
+    """Get the appropriate fetch function for the statement type."""
+    def fetch_balance_sheet(symbol: str, period: str = "annual", limit: int = 5) -> DataFrame:
+        return _fetch_financial_statement_data(symbol, statement_type, period, limit)
+
+    def fetch_income_statement(symbol: str, period: str = "annual", limit: int = 5) -> DataFrame:
+        return _fetch_financial_statement_data(symbol, statement_type, period, limit)
+
+    def fetch_cash_flow(symbol: str, period: str = "annual", limit: int = 5) -> DataFrame:
+        return _fetch_financial_statement_data(symbol, statement_type, period, limit)
+
+    if statement_type == "balance_sheet":
+        return fetch_balance_sheet
+    elif statement_type == "income_statement":
+        return fetch_income_statement
+    elif statement_type == "cash_flow":
+        return fetch_cash_flow
+    else:
+        raise ValueError(f"Unknown statement type: {statement_type}")
+
+
+def _fetch_financial_statement_data(
+    symbol: str,
+    statement_type: str,
+    period: str = "annual",
+    limit: int = 5,
+) -> DataFrame:
+    """Fetch financial statement data from TdxQuant API.
+
+    Parameters
+    ----------
+    symbol : str
+        Stock symbol (e.g., '600519.SH')
+    statement_type : str
+        Type of financial statement: 'balance_sheet', 'income_statement', or 'cash_flow'
+    period : str
+        Reporting period: 'annual' or 'quarter'
+    limit : int
+        Maximum number of periods to return
+
+    Returns
+    -------
+    DataFrame
+        Financial statement data as a pandas DataFrame
+    """
+    from openbb_tdx.utils.financial_statement_mapping import (
+        BalanceSheetMapper,
+        IncomeStatementMapper,
+        CashFlowStatementMapper,
+    )
+
+    symbol_b, symbol_f, market = normalize_symbol(symbol)
+    stock_code = f"{symbol_b}.{market}"
+
+    if statement_type == "balance_sheet":
+        mapper = BalanceSheetMapper
+    elif statement_type == "income_statement":
+        mapper = IncomeStatementMapper
+    elif statement_type == "cash_flow":
+        mapper = CashFlowStatementMapper
+    else:
+        raise ValueError(f"Unknown statement type: {statement_type}")
+
+    field_list = mapper.get_field_list()
+
+    mmdd_values = [1231] if period == "annual" else [1231, 930, 630, 331]
+
+    tq.initialize(__file__)
+
+    try:
+        latest_data = tq.get_financial_data_by_date(
+            stock_list=[stock_code],
+            field_list=field_list,
+            year=0,
+            mmdd=0
+        )
+
+        if not latest_data or stock_code not in latest_data:
+            logger.warning(f"No {statement_type} data found for {symbol}")
+            return pd.DataFrame()
+
+        latest_mapped = mapper.map_from_get_financial_data_by_date(
+            latest_data, year=0, mmdd=0
+        )
+        if stock_code not in latest_mapped:
+            logger.warning(f"No {statement_type} data found for {symbol}")
+            return pd.DataFrame()
+
+        latest_record = latest_mapped[stock_code]
+        period_ending = latest_record.get("period_ending")
+        if period_ending:
+            if hasattr(period_ending, 'year'):
+                current_year = period_ending.year
+            else:
+                current_year = int(str(period_ending)[:4])
+        else:
+            from datetime import datetime
+            current_year = datetime.now().year
+
+        all_data = []
+
+        if period == "annual":
+            for year_offset in range(limit):
+                target_year = current_year - year_offset
+                tdx_data = tq.get_financial_data_by_date(
+                    stock_list=[stock_code],
+                    field_list=field_list,
+                    year=target_year,
+                    mmdd=1231
+                )
+
+                if tdx_data and stock_code in tdx_data:
+                    mapped_data = mapper.map_from_get_financial_data_by_date(
+                        tdx_data, year=target_year, mmdd=1231
+                    )
+                    if stock_code in mapped_data:
+                        record = mapped_data[stock_code]
+                        record.pop("query_year", None)
+                        record.pop("query_mmdd", None)
+                        all_data.append(record)
+        else:
+            for year_offset in range((limit // 4) + 1):
+                target_year = current_year - year_offset
+                for mmdd in mmdd_values:
+                    if len(all_data) >= limit:
+                        break
+                    tdx_data = tq.get_financial_data_by_date(
+                        stock_list=[stock_code],
+                        field_list=field_list,
+                        year=target_year,
+                        mmdd=mmdd
+                    )
+
+                    if tdx_data and stock_code in tdx_data:
+                        mapped_data = mapper.map_from_get_financial_data_by_date(
+                            tdx_data, year=target_year, mmdd=mmdd
+                        )
+                        if stock_code in mapped_data:
+                            record = mapped_data[stock_code]
+                            record.pop("query_year", None)
+                            record.pop("query_mmdd", None)
+                            all_data.append(record)
+                if len(all_data) >= limit:
+                    break
+
+        if not all_data:
+            logger.warning(f"No {statement_type} data found for {symbol}")
+            return pd.DataFrame()
+
+        df = pd.DataFrame(all_data)
+        return df.head(limit)
+
+    except Exception as e:
+        logger.error(f"Error fetching {statement_type} data for {symbol}: {e}")
+        return pd.DataFrame()
+    finally:
+        tq.close()

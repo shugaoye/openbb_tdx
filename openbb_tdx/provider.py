@@ -5,6 +5,9 @@ from openbb_tdx.models.equity_dividends import TdxQuantEquityDividendsFetcher
 from openbb_tdx.models.equity_profile import TdxQuantEquityProfileFetcher
 from openbb_tdx.models.equity_search import TdxQuantEquitySearchFetcher
 from openbb_tdx.models.equity_key_metrics import TdxQuantKeyMetricsFetcher
+from openbb_tdx.models.balance_sheet import TdxQuantBalanceSheetFetcher
+from openbb_tdx.models.income_statement import TdxQuantIncomeStatementFetcher
+from openbb_tdx.models.cash_flow import TdxQuantCashFlowStatementFetcher
 
 # mypy: disable-error-code="list-item"
 
@@ -24,5 +27,8 @@ provider = Provider(
         "EquityInfo": TdxQuantEquityProfileFetcher,
         "EquitySearch": TdxQuantEquitySearchFetcher,
         "KeyMetrics": TdxQuantKeyMetricsFetcher,
+        "BalanceSheet": TdxQuantBalanceSheetFetcher,
+        "IncomeStatement": TdxQuantIncomeStatementFetcher,
+        "CashFlowStatement": TdxQuantCashFlowStatementFetcher,
     }
 )

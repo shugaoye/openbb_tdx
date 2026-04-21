@@ -175,6 +175,13 @@ class TdxQuantEquityQuoteFetcher(
                     logger.error(f"Error fetching data for symbol {symbol}: {error_msg}")
                     return {"symbol": symbol, "error": str(error_msg)}
                 
+                # Get more info data for year_high and year_low
+                more_info = {}
+                try:
+                    more_info = tq.get_more_info(stock_code=symbol_f, field_list=[])
+                except Exception as e:
+                    logger.warning(f"Failed to fetch more_info for {symbol}: {e}")
+                
                 # Map TdxQuant API fields to OpenBB standard fields
                 # Get exchange name using helper function
                 try:
@@ -194,8 +201,8 @@ class TdxQuantEquityQuoteFetcher(
                     "volume": int(float(market_snapshot.get('Volume', 0))),
                     "change": float(market_snapshot.get('TickDiff', 0)),
                     "change_pct": float(market_snapshot.get('Zangsu', 0)),
-                    "year_high": None,  # Not provided by TdxQuant snapshot
-                    "year_low": None,  # Not provided by TdxQuant snapshot
+                    "year_high": float(more_info.get('HisHigh', 0)) if more_info.get('HisHigh') else None,
+                    "year_low": float(more_info.get('HisLow', 0)) if more_info.get('HisLow') else None,
                     "bid": float(market_snapshot.get('Buyp', ['0'])[0]) if market_snapshot.get('Buyp') else 0,
                     "bid_volume": int(float(market_snapshot.get('Buyv', ['0'])[0])) if market_snapshot.get('Buyv') else 0,
                     "ask": float(market_snapshot.get('Sellp', ['0'])[0]) if market_snapshot.get('Sellp') else 0,

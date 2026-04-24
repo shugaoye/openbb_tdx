@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{ include = "openbb_tdx" }]
 
 [tool.poetry.dependencies]
-python = ">=3.13,<3.14"
+python = ">=3.13,<=3.14.3"
 openbb = "4.7.1"
 openbb-core = { version = "^1.6.8" }
 mysharelib = "^1.0.5"
